@@ -1,13 +1,13 @@
-import cv2 # type: ignore
+import cv2 # type: ignore 
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from tensorflow.keras import layers, models # type: ignore
 from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
 
-# Parameters (Fixed typo from BACH_SIZE to BATCH_SIZE)
+# Parameters
 IMG_SIZE = 128
-BATCH_SIZE = 32  # Corrected spelling
-EPOCHS = 50  # Reduced from 500 to prevent overfitting
+BATCH_SIZE = 32
+EPOCHS = 50
 
 # Data Augmentation
 train_datagen = ImageDataGenerator(
@@ -24,50 +24,45 @@ train_datagen = ImageDataGenerator(
 
 test_datagen = ImageDataGenerator(rescale=1./255)
 
-# Dataset Setup for Helmet Detection
+# Dataset Setup with additional safe classes
 train_generator = train_datagen.flow_from_directory(
     'dataset/train',
     target_size=(IMG_SIZE, IMG_SIZE),
-    batch_size=BATCH_SIZE,  # Corrected spelling
-    class_mode='binary',
-    classes=['no_helmet', 'helmet']  # Alphabetical order matters!
+    batch_size=BATCH_SIZE,
+    class_mode='categorical',
+    classes=['no_helmet', 'helmet', 'unprotected_edge', 'protected_edge', 'unstable_trench', 'protected_trench', 'uneven_surface', 'loose_wires', 'wet_floor', 'misplaced_tools', 'even_surface', 'no_loose_wires', 'dry_floor', 'un_misplaced_tools']
 )
 
 test_generator = test_datagen.flow_from_directory(
     'dataset/test',
     target_size=(IMG_SIZE, IMG_SIZE),
-    batch_size=BATCH_SIZE,  # Corrected spelling
-    class_mode='binary',
-    classes=['no_helmet', 'helmet']
+    batch_size=BATCH_SIZE,
+    class_mode='categorical',
+    classes=['no_helmet', 'helmet', 'unprotected_edge', 'protected_edge', 'unstable_trench', 'protected_trench', 'uneven_surface', 'loose_wires', 'wet_floor', 'misplaced_tools', 'even_surface', 'no_loose_wires', 'dry_floor', 'un_misplaced_tools']
 )
 
-# Enhanced Model Architecture
+# Updated model with 14 output classes
 model = models.Sequential([
     layers.Conv2D(32, (3,3), activation='relu', input_shape=(IMG_SIZE, IMG_SIZE, 3)),
     layers.MaxPooling2D((2,2)),
     layers.BatchNormalization(),
-    
     layers.Conv2D(64, (3,3), activation='relu'),
     layers.MaxPooling2D((2,2)),
     layers.Dropout(0.3),
-    
     layers.Conv2D(128, (3,3), activation='relu'),
     layers.MaxPooling2D((2,2)),
     layers.BatchNormalization(),
-    
     layers.Flatten(),
-    layers.Dense(256, activation='relu'),  # Reduced from 512
+    layers.Dense(256, activation='relu'),
     layers.Dropout(0.5),
-    layers.Dense(1, activation='sigmoid')
+    layers.Dense(14, activation='softmax')
 ])
 
-# Added early stopping to prevent overfitting
 from tensorflow.keras.callbacks import EarlyStopping # type: ignore
 early_stop = EarlyStopping(monitor='val_loss', patience=5)
 
-model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Training with validation
 history = model.fit(
     train_generator,
     epochs=EPOCHS,
@@ -75,21 +70,17 @@ history = model.fit(
     callbacks=[early_stop]
 )
 
-# Evaluation
 test_loss, test_acc = model.evaluate(test_generator)
-print(f'Test accuracy: {test_acc:.2%}')  # Formatted percentage
+print(f'Test accuracy: {test_acc:.2%}')
 
-# Visualization with helmet labels
-class_names = ['No Helmet', 'Helmet']  # Updated class names
-
+class_names = ['No Helmet', 'Helmet', 'Unprotected Edge', 'Protected Edge', 'Unstable Trench', 'Protected Trench', 'Uneven Surface', 'Loose Wires', 'Wet Floor', 'Misplaced Tools', 'Even Surface', 'No Loose Wires', 'Dry Floor', 'Un-Misplaced Tools']
 images, labels = next(test_generator)
 predictions = model.predict(images)
-predicted_classes = (predictions > 0.5).astype(int)
-
+predicted_classes = np.argmax(predictions, axis=1)
 plt.figure(figsize=(10, 10))
 for i in range(9):
     plt.subplot(3, 3, i+1)
     plt.imshow(images[i])
-    plt.title(f"Pred: {class_names[predicted_classes[i][0]]}\nTrue: {class_names[int(labels[i])]}")
+    plt.title(f"Pred: {class_names[predicted_classes[i]]}\nTrue: {class_names[np.argmax(labels[i])]}")
     plt.axis('off')
 plt.show()
