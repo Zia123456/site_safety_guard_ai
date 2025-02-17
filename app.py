@@ -1,36 +1,39 @@
-import cv2 # type: ignore 
-import numpy as np # type: ignore
-import matplotlib.pyplot as plt # type: ignore
-from tensorflow.keras import layers, models # type: ignore
-from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping
 
 # Parameters
 IMG_SIZE = 128
 BATCH_SIZE = 32
 EPOCHS = 50
 
-# Data Augmentation
+classes = [
+    'no_helmet', 'helmet', 'unprotected_edge', 'protected_edge',
+    'unstable_trench', 'protected_trench', 'uneven_surface', 'loose_wires',
+    'wet_floor', 'misplaced_tools', 'even_surface', 'no_loose_wires',
+    'dry_floor', 'un_misplaced_tools'
+]
+
 train_datagen = ImageDataGenerator(
     rescale=1./255,
     shear_range=0.2,
     zoom_range=0.2,
     horizontal_flip=True,
     validation_split=0.2,
-    fill_mode='nearest',
-    height_shift_range=0.2,
-    width_shift_range=0.2,
-    rotation_range=20
+    fill_mode='nearest'
 )
 
 test_datagen = ImageDataGenerator(rescale=1./255)
 
-# Dataset Setup with additional safe classes
 train_generator = train_datagen.flow_from_directory(
     'dataset/train',
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode='categorical',
-    classes=['no_helmet', 'helmet', 'unprotected_edge', 'protected_edge', 'unstable_trench', 'protected_trench', 'uneven_surface', 'loose_wires', 'wet_floor', 'misplaced_tools', 'even_surface', 'no_loose_wires', 'dry_floor', 'un_misplaced_tools']
+    classes=classes
 )
 
 test_generator = test_datagen.flow_from_directory(
@@ -38,10 +41,9 @@ test_generator = test_datagen.flow_from_directory(
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode='categorical',
-    classes=['no_helmet', 'helmet', 'unprotected_edge', 'protected_edge', 'unstable_trench', 'protected_trench', 'uneven_surface', 'loose_wires', 'wet_floor', 'misplaced_tools', 'even_surface', 'no_loose_wires', 'dry_floor', 'un_misplaced_tools']
+    classes=classes
 )
 
-# Updated model with 14 output classes
 model = models.Sequential([
     layers.Conv2D(32, (3,3), activation='relu', input_shape=(IMG_SIZE, IMG_SIZE, 3)),
     layers.MaxPooling2D((2,2)),
@@ -55,13 +57,12 @@ model = models.Sequential([
     layers.Flatten(),
     layers.Dense(256, activation='relu'),
     layers.Dropout(0.5),
-    layers.Dense(14, activation='softmax')
+    layers.Dense(len(classes), activation='softmax')
 ])
 
-from tensorflow.keras.callbacks import EarlyStopping # type: ignore
-early_stop = EarlyStopping(monitor='val_loss', patience=5)
-
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+early_stop = EarlyStopping(monitor='val_loss', patience=5)
 
 history = model.fit(
     train_generator,
@@ -70,17 +71,20 @@ history = model.fit(
     callbacks=[early_stop]
 )
 
-test_loss, test_acc = model.evaluate(test_generator)
-print(f'Test accuracy: {test_acc:.2%}')
-
-class_names = ['No Helmet', 'Helmet', 'Unprotected Edge', 'Protected Edge', 'Unstable Trench', 'Protected Trench', 'Uneven Surface', 'Loose Wires', 'Wet Floor', 'Misplaced Tools', 'Even Surface', 'No Loose Wires', 'Dry Floor', 'Un-Misplaced Tools']
 images, labels = next(test_generator)
 predictions = model.predict(images)
-predicted_classes = np.argmax(predictions, axis=1)
-plt.figure(figsize=(10, 10))
-for i in range(9):
-    plt.subplot(3, 3, i+1)
+
+plt.figure(figsize=(20, 20))
+num_images = len(images)
+cols = 5
+rows = (num_images // cols) + (1 if num_images % cols != 0 else 0)
+
+for i in range(num_images):
+    plt.subplot(rows, cols, i+1)
     plt.imshow(images[i])
-    plt.title(f"Pred: {class_names[predicted_classes[i]]}\nTrue: {class_names[np.argmax(labels[i])]}")
     plt.axis('off')
+    plt.subplots_adjust(right=0.8)
+    plt.text(1.05, 0.5, "\n".join([f"{classes[j]}: {predictions[i][j]*100:.2f}%" for j in range(len(classes))]), fontsize=4, va='center', ha='left', transform=plt.gca().transAxes)
+
+plt.tight_layout()
 plt.show()
